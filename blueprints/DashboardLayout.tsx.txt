@@ -1,0 +1,63 @@
+// app/(dashboard)/layout.tsx
+//
+// Dashboard shell for "My Magical Garden".
+// Contains the 2 required Ad Banner slots (Top + Sidebar), which only render
+// live ad content when the parent's subscription is in the "restricted" state
+// (30+ days overdue). Otherwise they collapse to zero height so the layout
+// never "feels" ad-driven for paying families.
+
+import { createServerSupabaseClient } from "@/lib/supabase/server";
+import TopBannerSlot from "@/components/ads/TopBannerSlot";
+import SidebarBannerSlot from "@/components/ads/SidebarBannerSlot";
+import SubscriptionStatusBanner from "@/components/subscription/SubscriptionStatusBanner";
+import { getSubscriptionState } from "@/lib/subscription/getSubscriptionState";
+import Sidebar from "@/components/ui/Sidebar";
+
+export default async function DashboardLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  const supabase = createServerSupabaseClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  // Pull the parent's latest subscription record and derive its state
+  // via the same logic as get_subscription_state() in Postgres.
+  const { data: subscription } = await supabase
+    .from("parent_subscription_status")
+    .select("*")
+    .eq("parent_id", user?.id)
+    .single();
+
+  const subscriptionState = subscription?.state ?? "active"; // 'active' | 'reminder' | 'restricted'
+  const adsActive = subscriptionState === "restricted";
+
+  return (
+    <div className="flex min-h-screen bg-emerald-50">
+      <Sidebar />
+
+      <div className="flex flex-1 flex-col">
+        {/* --- AD SLOT 1: Top Banner ------------------------------------- */}
+        {/* Only renders real ad content when adsActive; otherwise it's an
+            empty, zero-height container so paying users never see a gap. */}
+        <TopBannerSlot active={adsActive} />
+
+        {subscriptionState !== "active" && (
+          <SubscriptionStatusBanner state={subscriptionState} />
+        )}
+
+        <div className="flex flex-1 gap-6 px-4 py-6 md:px-8">
+          <main className="flex-1">{children}</main>
+
+          <aside className="hidden w-[300px] shrink-0 lg:block">
+            {/* --- AD SLOT 2: Sidebar Banner ------------------------------ */}
+            <SidebarBannerSlot active={adsActive} />
+          </aside>
+        </div>
+      </div>
+    </div>
+  );
+}

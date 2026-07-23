@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+/* ============================================================================
+   نظام التصميم — منصة المفيد
+   لهجتان بصريتان بهوية واحدة:
+   - نبرة الطفل (الحديقة، التحدي، المكافآت): دافئة، مستديرة، حيّة
+   - نبرة الوالد (الحساب، الاشتراك، التقرير): هادئة، واضحة، جديرة بالثقة
+   ============================================================================ */
+
+:root {
+  /* الأساس */
+  --paper: #FBF7EC;          /* خلفية دافئة كورق العتيق */
+  --ink: #1C2B23;            /* نص أساسي، أخضر داكن قريب من الأسود */
+
+  /* هوية "الحديقة" — النمو والحياة */
+  --forest-700: #14532D;
+  --forest-600: #1F6D42;
+  --forest-500: #2E8B57;
+  --forest-100: #E6F3EA;
+
+  /* هوية "الماء" — السقي والتقدم */
+  --water-600: #1E6F9F;
+  --water-400: #5CB3DE;
+  --water-100: #E7F4FA;
+
+  /* هوية "الثمرة" — المكافأة والاحتفال */
+  --fruit-600: #D97B29;
+  --fruit-500: #E8A33D;
+  --fruit-100: #FCF0DC;
+
+  /* هوية "الذبول" — تنبيه لطيف بلا تخويف */
+  --wither-600: #B45309;
+  --wither-100: #FDF1E0;
+
+  /* نبرة الوالد — ثقة وهدوء مسائي */
+  --dusk-800: #1E2947;
+  --dusk-600: #2F3D63;
+  --dusk-100: #E9ECF5;
+
+  --radius-organic: 42% 58% 61% 39% / 45% 41% 59% 55%;
+}
+
+html, body {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* خط العرض للعناوين الحيّة (نبرة الطفل) */
+.font-display {
+  font-family: "Baloo Bhaijaan 2", "Tajawal", system-ui, sans-serif;
+}
+
+/* خط النص الأساسي — واضح ومقروء لكل الأعمار */
+.font-body {
+  font-family: "IBM Plex Sans Arabic", "Tajawal", system-ui, sans-serif;
+}
+
+/* الشكل العضوي المميز لبطاقات الحديقة — بدل الزوايا المستطيلة المعتادة */
+.shape-organic {
+  border-radius: var(--radius-organic);
+}
+
+@keyframes leaf-sway {
+  0%, 100% { transform: rotate(-1.5deg); }
+  50% { transform: rotate(1.5deg); }
+}
+.animate-leaf-sway {
+  animation: leaf-sway 4s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-leaf-sway { animation: none; }
+}

@@ -1,0 +1,43 @@
+// components/ads/TopBannerSlot.tsx
+// components/ads/SidebarBannerSlot.tsx
+//
+// Both slots collapse to nothing when `active` is false, so they never
+// take up visual space for a paying family. When `active` is true (30+ days
+// overdue), they render the ad unit — swap the placeholder div below for
+// your Google Ad Manager / AdSense tag or a local ad network snippet.
+
+"use client";
+
+interface AdSlotProps {
+  active: boolean;
+}
+
+export function TopBannerSlot({ active }: AdSlotProps) {
+  if (!active) return null;
+
+  return (
+    <div
+      id="ad-slot-top-banner"
+      className="flex h-[90px] w-full items-center justify-center border-b border-amber-300 bg-amber-100 text-sm text-amber-700"
+    >
+      {/* Replace with <ins className="adsbygoogle" ... /> or local ad network embed */}
+      Sponsored — Ad Banner (Top)
+    </div>
+  );
+}
+
+export function SidebarBannerSlot({ active }: AdSlotProps) {
+  if (!active) return null;
+
+  return (
+    <div
+      id="ad-slot-sidebar-banner"
+      className="flex h-[250px] w-full items-center justify-center rounded-xl border border-amber-300 bg-amber-100 text-sm text-amber-700"
+    >
+      {/* Replace with <ins className="adsbygoogle" ... /> or local ad network embed */}
+      Sponsored — Ad Banner (Sidebar)
+    </div>
+  );
+}
+
+export default TopBannerSlot;
