@@ -43,6 +43,17 @@ export default function OnboardingPage() {
     });
   }, [router]);
 
+  function describeError(err: unknown): string {
+    if (err instanceof Error) return err.message;
+    if (typeof err === "object" && err !== null) {
+      const e = err as { message?: string; details?: string; hint?: string; code?: string };
+      const parts = [e.code, e.message, e.details, e.hint].filter(Boolean);
+      if (parts.length > 0) return parts.join(" | ");
+      return JSON.stringify(err);
+    }
+    return "تعذّر حفظ البيانات، يرجى المحاولة من جديد";
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
@@ -54,7 +65,8 @@ export default function OnboardingPage() {
 
     setSubmitting(true);
     try {
-      const { data: userData } = await supabase.auth.getUser();
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError) throw userError;
       const parentId = userData.user?.id;
       if (!parentId) throw new Error("انتهت الجلسة، يرجى تسجيل الدخول من جديد");
 
@@ -66,7 +78,7 @@ export default function OnboardingPage() {
 
       if (levelError || !level) {
         throw new Error(
-          `تعذّر تحديد المستوى: ${levelError ? JSON.stringify(levelError) : "لا توجد نتيجة"} (slug: ${levelSlug})`
+          `تعذّر تحديد المستوى: ${levelError ? describeError(levelError) : "لا توجد نتيجة"} (slug: ${levelSlug})`
         );
       }
 
@@ -89,8 +101,7 @@ export default function OnboardingPage() {
 
       router.push("/garden");
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "تعذّر حفظ البيانات، يرجى المحاولة من جديد";
-      setError(msg);
+      setError(describeError(err));
     } finally {
       setSubmitting(false);
     }
