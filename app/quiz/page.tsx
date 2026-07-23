@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState, useEffect } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/app/utils/supabase";
 import { generateQuizQuestions } from "@/utils/gemini";
 
@@ -21,8 +21,24 @@ interface SubjectOption {
 
 type Stage = "loadingProfile" | "pickingSubject" | "loadingQuestions" | "quiz" | "finished";
 
-export default function QuizPage() {
+export default function QuizPageWrapper() {
+  return (
+    <Suspense
+      fallback={
+        <main className="min-h-screen bg-[var(--paper)] flex items-center justify-center">
+          <span className="text-3xl animate-pulse">🌱</span>
+        </main>
+      }
+    >
+      <QuizPage />
+    </Suspense>
+  );
+}
+
+function QuizPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const preselectedSlug = searchParams.get("subject");
 
   const [stage, setStage] = useState<Stage>("loadingProfile");
   const [studentId, setStudentId] = useState("");
@@ -77,25 +93,32 @@ export default function QuizPage() {
         .select("id, subject_slug, subject_name_ar, base_color")
         .eq("student_id", student.id);
 
-      setSubjects(
-        (trees ?? []).map((t) => ({
-          treeId: t.id,
-          slug: t.subject_slug,
-          nameAr: t.subject_name_ar,
-          baseColor: t.base_color,
-        }))
-      );
-      setStage("pickingSubject");
+      const list = (trees ?? []).map((t) => ({
+        treeId: t.id,
+        slug: t.subject_slug,
+        nameAr: t.subject_name_ar,
+        baseColor: t.base_color,
+      }));
+      setSubjects(list);
+
+      const preMatch = preselectedSlug ? list.find((s) => s.slug === preselectedSlug) : undefined;
+      if (preMatch) {
+        setStage("pickingSubject");
+        startQuiz(preMatch, level?.name_ar);
+      } else {
+        setStage("pickingSubject");
+      }
     }
     loadProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
-  async function startQuiz(subject: SubjectOption) {
+  async function startQuiz(subject: SubjectOption, levelOverride?: string) {
     setSelectedSubject(subject);
     setStage("loadingQuestions");
     try {
-      const levelForPrompt = levelNameAr.replace(" الابتدائي", "");
-      const fetched = await generateQuizQuestions(subject.nameAr, levelForPrompt);
+      const effectiveLevel = (levelOverride ?? levelNameAr).replace(" الابتدائي", "");
+      const fetched = await generateQuizQuestions(subject.nameAr, effectiveLevel);
       setQuestions(fetched);
       setCurrentQuestion(0);
       setScore(0);
@@ -107,7 +130,6 @@ export default function QuizPage() {
     }
   }
 
-  // فترة قراءة قبل بداية العداد التنازلي — تمنح الطفل وقتاً لقراءة السؤال بهدوء
   useEffect(() => {
     if (stage !== "quiz") return;
     setIsReading(true);

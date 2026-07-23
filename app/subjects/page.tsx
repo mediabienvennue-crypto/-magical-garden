@@ -1,122 +1,179 @@
 "use client";
-import { useState, useEffect } from "react";
+
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/app/utils/supabase";
 
-interface Lesson {
-  id: string; title: string; isLocked: boolean; isCompleted: boolean; rewardXp: number;
+interface TreeRow {
+  id: string;
+  subject_slug: string;
+  subject_name_ar: string;
+  base_color: string;
+  xp: number;
+  health: "healthy" | "withering" | "withered";
+  current_streak_days: number;
 }
 
-interface SubjectQuest {
-  id: string; name: string; emoji: string; worldName: string; bgGradient: string; lessons: Lesson[];
-}
+const XP_CAP = 500;
+
+const HEALTH_LABEL: Record<TreeRow["health"], string> = {
+  healthy: "🌳 مزدهرة",
+  withering: "🍂 تحتاج سقياً",
+  withered: "🥀 ذابلة، أنقذها!",
+};
 
 export default function SubjectsPage() {
   const router = useRouter();
-  const [studentName, setStudentName] = useState("محمد");
-  const [studentLevel, setStudentLevel] = useState("الثالث الابتدائي");
+  const [loading, setLoading] = useState(true);
+  const [studentName, setStudentName] = useState("");
+  const [levelNameAr, setLevelNameAr] = useState("");
+  const [trees, setTrees] = useState<TreeRow[]>([]);
+  const [error, setError] = useState("");
 
-  const [subjects] = useState<SubjectQuest[]>([
-    {
-      id: "sub-math", name: "الرياضيات", emoji: "📐", worldName: "مملكة الأرقام السحرية 🏰", bgGradient: "from-amber-400 to-orange-500",
-      lessons: [
-        { id: "m1", title: "المهمة 1: أسرار جدول الضرب والقسمة 🧠", isLocked: false, isCompleted: true, rewardXp: 30 },
-        { id: "m2", title: "المهمة 2: مغامرة الكسور والأعداد العشرية 🧮", isLocked: false, isCompleted: false, rewardXp: 40 },
-        { id: "m3", title: "المهمة 3: لغز زوايا الأشكال الهندسية 📐", isLocked: true, isCompleted: false, rewardXp: 50 },
-      ]
-    },
-    {
-      id: "sub-sci", name: "العلوم", emoji: "🌿", worldName: "غابة الاستكشاف الحيوي 🌳", bgGradient: "from-emerald-400 to-teal-600",
-      lessons: [
-        { id: "s1", title: "المهمة 1: رحلة الدورة المائية في الطبيعة 💧", isLocked: false, isCompleted: false, rewardXp: 35 },
-        { id: "s2", title: "المهمة 2: لغز مكونات النبتة السحرية 🌱", isLocked: true, isCompleted: false, rewardXp: 45 },
-      ]
-    },
-    {
-      id: "sub-ara", name: "اللغة العربية", emoji: "📘", worldName: "واحة الكلمات الذهبية 🌴", bgGradient: "from-sky-400 to-blue-600",
-      lessons: [
-        { id: "a1", title: "المهمة 1: إعراب جملة سقى البستاني الشجرة ✍️", isLocked: false, isCompleted: true, rewardXp: 30 },
-        { id: "a2", title: "المهمة 2: رادار التمييز بين الفعل والفاعل 📘", isLocked: false, isCompleted: false, rewardXp: 35 },
-      ]
-    }
-  ]);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        router.replace("/auth");
+        return;
+      }
 
-  useEffect(() => {
-    const savedData = localStorage.getItem("child_onboarding");
-    if (savedData) {
-      const parsed = JSON.parse(savedData);
-      if (parsed.name) setStudentName(parsed.name);
-      if (parsed.academicLevel) setStudentLevel(parsed.academicLevel);
-    }
-  }, []);
+      const { data: students, error: studentsError } = await supabase
+        .from("students")
+        .select("id, first_name, level_id")
+        .eq("parent_id", userData.user.id)
+        .order("created_at", { ascending: true })
+        .limit(1);
+      if (studentsError) throw studentsError;
 
-  function handleStartLesson(lesson: Lesson, subjectName: string) {
-    if (lesson.isLocked) {
-      alert("🔒 هذه المهمة التعليمية مغلقة حالياً! أكمل التحدي السابق بنجاح لتفتح هذا المستوى!");
-      return;
+      if (!students || students.length === 0) {
+        router.replace("/onboarding");
+        return;
+      }
+
+      setStudentName(students[0].first_name);
+
+      const { data: level } = await supabase
+        .from("levels")
+        .select("name_ar")
+        .eq("id", students[0].level_id)
+        .single();
+      if (level) setLevelNameAr(level.name_ar);
+
+      const { data: treeRows, error: treesError } = await supabase
+        .from("student_trees_view")
+        .select("id, subject_slug, subject_name_ar, base_color, xp, health, current_streak_days")
+        .eq("student_id", students[0].id);
+      if (treesError) throw treesError;
+
+      setTrees(treeRows ?? []);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "تعذّر تحميل المواد";
+      setError(msg);
+    } finally {
+      setLoading(false);
     }
-    router.push("/quiz");
+  }, [router]);
+
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-[var(--paper)] flex items-center justify-center">
+        <span className="text-3xl animate-pulse">🗺️</span>
+      </main>
+    );
   }
 
   return (
-    <main className="min-h-screen bg-gradient-to-b from-indigo-100 via-sky-50 to-emerald-50 p-6 flex flex-col items-center select-none text-right" dir="rtl">
-      
-      {/* 🌟 التحديث التربوي الجديد في العبارات الفرعية والترحيبية */}
-      <header className="w-full max-w-4xl text-center my-8 bg-white/70 backdrop-blur-md p-6 rounded-3xl border border-white shadow-sm flex flex-col sm:flex-row justify-between items-center gap-4">
+    <main className="min-h-screen bg-[var(--paper)] pb-16">
+      <header className="w-full bg-white border-b border-[var(--forest-100)] px-4 sm:px-6 py-4 sm:py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-black text-slate-950">🗺️ خريطة مغامرات البطل(ة) {studentName}</h1>
-          <p className="text-xs text-slate-600 font-bold mt-1">اختر المادة لّي بغيتي، كمل المهمة، وربح ماء سحري لتكبير حديقتك! 💦✨</p>
+          <h1 className="font-display text-lg sm:text-xl font-bold text-[var(--ink)]">
+            🗺️ خريطة مغامرات {studentName || "البطل"}
+          </h1>
+          <p className="text-[11px] text-slate-500 mt-0.5">
+            اختر مادة وابدأ تحدياً جديداً لتسقي شجرتها
+          </p>
         </div>
-        <div className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-black text-xs px-5 py-3 rounded-2xl shadow-md">
-          المستوى الحالي: {studentLevel} 🎒
-        </div>
+        {levelNameAr && (
+          <span className="text-xs font-bold bg-[var(--dusk-100)] text-[var(--dusk-800)] px-3.5 py-2 rounded-xl self-start sm:self-auto">
+            المستوى الحالي: {levelNameAr} 🎒
+          </span>
+        )}
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl w-full px-2">
-        {subjects.map((sub) => (
-          <div key={sub.id} className="bg-white rounded-3xl p-5 shadow-md border border-slate-100 flex flex-col overflow-hidden relative group">
-            <div className={`w-full bg-gradient-to-r ${sub.bgGradient} p-4 rounded-2xl text-white relative mb-4 shadow-sm`}>
-              <span className="text-3xl absolute -left-2 -bottom-2 opacity-20 transform scale-150">{sub.emoji}</span>
-              <div className="flex items-center gap-2">
-                <span className="text-xl">{sub.emoji}</span>
-                <h3 className="text-base font-black tracking-tight">{sub.name}</h3>
-              </div>
-              <p className="text-[10px] font-bold text-white/90 mt-1">{sub.worldName}</p>
-            </div>
-
-            <div className="space-y-3 flex-1 flex flex-col justify-start">
-              {sub.lessons.map((lesson) => {
-                let borderClass = "border-slate-100 bg-slate-50/40 text-slate-700";
-                let statusBadge = "🔒 مقفول";
-                let badgeColor = "bg-slate-100 text-slate-500";
-
-                if (lesson.isCompleted) {
-                  borderClass = "border-emerald-200 bg-emerald-50/30 text-emerald-950";
-                  statusBadge = "✅ مكتمل";
-                  badgeColor = "bg-emerald-100 text-emerald-800";
-                } else if (!lesson.isLocked) {
-                  borderClass = "border-sky-200 bg-sky-50/40 text-sky-950 hover:bg-sky-50 transition-colors cursor-pointer shadow-sm animate-pulse [animation-duration:3s]";
-                  statusBadge = "🔓 ابدأ المهمة";
-                  badgeColor = "bg-sky-500 text-white";
-                }
-
-                return (
-                  <div key={lesson.id} onClick={() => handleStartLesson(lesson, sub.name)} className={`p-3.5 rounded-2xl border text-xs font-bold flex justify-between items-center transition-all ${borderClass}`}>
-                    <div className="flex-1 pl-2">
-                      <p className="leading-tight">{lesson.title}</p>
-                      <span className="text-[10px] font-black text-amber-600 mt-1 block">+{lesson.rewardXp} نقطة ماء 💧</span>
-                    </div>
-                    <span className={`text-[9px] font-black px-2 py-0.5 rounded-full whitespace-nowrap ${badgeColor}`}>{statusBadge}</span>
-                  </div>
-                );
-              })}
-            </div>
+      <section className="max-w-4xl mx-auto px-4 sm:px-6 mt-6 sm:mt-8">
+        {error && (
+          <div className="p-4 rounded-xl text-xs font-bold mb-6 text-center bg-rose-50 text-rose-700 border border-rose-100">
+            {error}
           </div>
-        ))}
-      </div>
+        )}
 
-      <button type="button" onClick={() => router.push("/garden")} className="mt-10 bg-slate-900 text-white font-black text-xs px-6 py-3.5 rounded-2xl hover:bg-slate-800 active:scale-95 transition-all shadow-md">
-        رجوع للحديقة السحرية 🌳
-      </button>
+        {trees.length === 0 && !error ? (
+          <p className="text-center text-sm text-slate-500 py-16">
+            لا توجد مواد مرتبطة بحسابك بعد.
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {trees.map((tree) => {
+              const progress = Math.min(100, Math.round((tree.xp / XP_CAP) * 100));
+              return (
+                <div
+                  key={tree.id}
+                  className="bg-white rounded-3xl p-5 shadow-sm border border-[var(--forest-100)] flex flex-col"
+                >
+                  <div
+                    className="w-full p-4 rounded-2xl text-white mb-4 shadow-sm"
+                    style={{
+                      background: `linear-gradient(135deg, ${tree.base_color}, ${tree.base_color}CC)`,
+                    }}
+                  >
+                    <h3 className="text-base font-black">{tree.subject_name_ar}</h3>
+                    <p className="text-[11px] font-bold text-white/90 mt-1">
+                      {HEALTH_LABEL[tree.health]}
+                    </p>
+                  </div>
+
+                  <div className="flex-1">
+                    <div className="flex justify-between items-center text-[11px] font-bold text-slate-500 mb-1.5">
+                      <span>XP {tree.xp}</span>
+                      {tree.current_streak_days > 0 && (
+                        <span className="text-[var(--fruit-600)]">🔥 {tree.current_streak_days} يوم متتالٍ</span>
+                      )}
+                    </div>
+                    <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all"
+                        style={{ width: `${progress}%`, backgroundColor: tree.base_color }}
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => router.push(`/quiz?subject=${tree.subject_slug}`)}
+                    className="w-full mt-4 bg-[var(--forest-600)] text-white font-bold text-xs py-3 rounded-xl hover:bg-[var(--forest-700)] transition-colors"
+                  >
+                    ابدأ تحدياً جديداً 🎯
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      <div className="text-center mt-10">
+        <button
+          type="button"
+          onClick={() => router.push("/garden")}
+          className="bg-[var(--dusk-800)] text-white font-bold text-xs px-6 py-3.5 rounded-2xl hover:opacity-90 active:scale-95 transition-all shadow-md"
+        >
+          رجوع للحديقة السحرية 🌳
+        </button>
+      </div>
     </main>
   );
 }
