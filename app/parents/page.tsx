@@ -1,146 +1,202 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/app/utils/supabase";
 
-interface ChildData {
-  name: string;
-  age: string;
-  favoriteFruit: string;
-  dreamJob: string;
-}
-
-interface CustomTask {
+interface TreeRow {
   id: string;
-  text: string;
-  xpReward: number;
+  subject_slug: string;
+  subject_name_ar: string;
+  base_color: string;
+  xp: number;
+  health: "healthy" | "withering" | "withered";
 }
 
-export default function ParentsDashboard() {
+interface ChildRow {
+  id: string;
+  first_name: string;
+  levelNameAr: string;
+  trees: TreeRow[];
+}
+
+const HEALTH_META: Record<TreeRow["health"], { label: string; badge: string }> = {
+  healthy: { label: "بخير", badge: "bg-[var(--forest-100)] text-[var(--forest-700)]" },
+  withering: { label: "تحتاج انتباهاً", badge: "bg-[var(--fruit-100)] text-[var(--fruit-600)]" },
+  withered: { label: "تحتاج تدخلاً", badge: "bg-rose-100 text-rose-700" },
+};
+
+export default function ParentsPage() {
   const router = useRouter();
-  const [child, setChild] = useState<ChildData>({
-    name: "محمد",
-    age: "11",
-    favoriteFruit: "الفراولة",
-    dreamJob: "رائد فضاء",
-  });
+  const [loading, setLoading] = useState(true);
+  const [parentName, setParentName] = useState("");
+  const [children, setChildren] = useState<ChildRow[]>([]);
+  const [error, setError] = useState("");
 
-  const [newTaskText, setNewTaskText] = useState("");
-  const [customTasks, setCustomTasks] = useState<CustomTask[]>([
-    { id: "c1", text: "حفظ سورة الملك كاملة 📑", xpReward: 25 },
-    { id: "c2", text: "مراجعة تمارين الصفحة 44 فالرياضيات 📐", xpReward: 15 },
-  ]);
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        router.replace("/auth");
+        return;
+      }
 
-  useEffect(() => {
-    const savedData = localStorage.getItem("child_onboarding");
-    if (savedData) {
-      const parsed = JSON.parse(savedData);
-      if (parsed.name) setChild(parsed);
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", userData.user.id)
+        .single();
+      setParentName(profile?.full_name || "");
+
+      const { data: students, error: studentsError } = await supabase
+        .from("students")
+        .select("id, first_name, level_id")
+        .eq("parent_id", userData.user.id)
+        .order("created_at", { ascending: true });
+      if (studentsError) throw studentsError;
+
+      if (!students || students.length === 0) {
+        setChildren([]);
+        setLoading(false);
+        return;
+      }
+
+      const enriched: ChildRow[] = [];
+      for (const s of students) {
+        const { data: level } = await supabase
+          .from("levels")
+          .select("name_ar")
+          .eq("id", s.level_id)
+          .single();
+
+        const { data: trees } = await supabase
+          .from("student_trees_view")
+          .select("id, subject_slug, subject_name_ar, base_color, xp, health")
+          .eq("student_id", s.id);
+
+        enriched.push({
+          id: s.id,
+          first_name: s.first_name,
+          levelNameAr: level?.name_ar ?? "",
+          trees: trees ?? [],
+        });
+      }
+      setChildren(enriched);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "تعذّر تحميل بيانات الأبناء";
+      setError(msg);
+    } finally {
+      setLoading(false);
     }
-    
-    const savedTasks = localStorage.getItem("parent_custom_tasks");
-    if (savedTasks) {
-      setCustomTasks(JSON.parse(savedTasks));
-    }
-  }, []);
+  }, [router]);
 
-  function handleAddTask(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newTaskText.trim()) return;
+  useEffect(() => { load(); }, [load]);
 
-    const newTask: CustomTask = {
-      id: Date.now().toString(),
-      text: newTaskText.trim(),
-      xpReward: 20,
-    };
-
-    const updatedTasks = [newTask, ...customTasks];
-    setCustomTasks(updatedTasks);
-    localStorage.setItem("parent_custom_tasks", JSON.stringify(updatedTasks));
-    setNewTaskText("");
-    alert("تمت إضافة المهمة بنجاح! غادي تبان عند الطفل فـ الحديقة ديالو 🌟");
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-[var(--paper)] flex items-center justify-center">
+        <span className="text-3xl animate-pulse">👨‍👩‍👧</span>
+      </main>
+    );
   }
+
   return (
-    <main className="min-h-screen bg-slate-50 p-6 flex flex-col items-center select-none text-right" dir="rtl">
-      
-      <header className="w-full max-w-4xl bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+    <main className="min-h-screen bg-[var(--paper)] pb-16">
+      <header className="w-full bg-white border-b border-[var(--dusk-100)] px-4 sm:px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">فضاء الآباء والأمهات 👨‍👩‍👦</h1>
-          <p className="text-sm text-slate-500 mt-1">تتبع نمو الحديقة السحرية والتحصيل الدراسي ديال ولادك</p>
+          <h1 className="font-display text-lg sm:text-xl font-bold text-[var(--dusk-800)]">
+            فضاء المتابعة {parentName ? `— ${parentName}` : ""} 👨‍👩‍👧
+          </h1>
+          <p className="text-[11px] text-slate-500 mt-0.5">تابع تقدّم أبنائك الدراسي في الحديقة السحرية</p>
         </div>
-        
-        {/* 🌟 شريط الأزرار المطور لمراقبة مسار الطفل والتقرير التحليلي */}
-        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-3">
-          <button
-            type="button"
-            onClick={() => router.push("/subjects")}
-            className="bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black text-xs px-4 py-3 rounded-2xl shadow-md hover:opacity-95 active:scale-95 transition-all flex items-center gap-1.5"
-          >
-            <span>🗺️ معاينة خريطة الدروس</span>
-          </button>
-          
-          <button
-            type="button"
-            onClick={() => router.push("/report")}
-            className="bg-gradient-to-r from-indigo-600 to-blue-600 text-white font-black text-xs px-4 py-3 rounded-2xl shadow-md hover:opacity-95 active:scale-95 transition-all flex items-center gap-1.5"
-          >
-            <span>📊 دفتر الضعف والقوة الذكي</span>
-          </button>
-        </div>
+        <button
+          onClick={() => router.push("/pricing")}
+          className="text-xs font-bold text-[var(--dusk-800)] bg-[var(--dusk-100)] px-3.5 py-2.5 rounded-xl hover:opacity-80 transition-colors"
+        >
+          💳 الاشتراك والدفع
+        </button>
       </header>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl w-full">
-        {/* بطاقة الطفل */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col">
-          <h2 className="text-base font-bold text-slate-900 mb-4 border-b pb-2">بطاقة الدخول للطفل 🪪</h2>
-          <ul className="space-y-3 text-sm text-slate-700 flex-1">
-            <li><strong className="text-slate-500">الاسم الكامل:</strong> {child.name}</li>
-            <li><strong className="text-slate-500">العمر:</strong> {child.age} سنة</li>
-            <li><strong className="text-slate-500">الفاكهة المفضلة:</strong> {child.favoriteFruit}</li>
-            <li><strong className="text-slate-500">حلم المستقبل:</strong> <span className="bg-sky-50 text-sky-700 px-2 py-0.5 rounded-full text-xs font-bold">{child.dreamJob}</span></li>
-          </ul>
-        </div>
-
-        {/* رادار التحذيرات البيداغوجية */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-          <h2 className="text-base font-bold text-slate-900 mb-4 border-b pb-2">رادار الانتباه والتحذيرات ⚠️</h2>
-          <div className="space-y-4">
-            <div className="p-3 bg-amber-50 rounded-2xl border border-amber-100">
-              <h4 className="text-xs font-bold text-amber-800">مادة العلوم محتاجة دعم!</h4>
-              <p className="text-[11px] text-amber-700 mt-0.5">شجرة مكونات النبتة واصلة لـ 45% فقط ومحتاجة سقي.</p>
-            </div>
-            <div className="p-3 bg-rose-50 rounded-2xl border border-rose-100">
-              <h4 className="text-xs font-bold text-rose-800">تنبيه: درس الكسور مهمل 🍂</h4>
-              <p className="text-[11px] text-rose-700 mt-0.5">محمد تعثر فـ كويز الكسور اليوم. يرجى تشجيعه على إعادة المحاولة.</p>
-            </div>
+      <section className="max-w-4xl mx-auto px-4 sm:px-6 mt-6 sm:mt-8">
+        {error && (
+          <div className="p-4 rounded-xl text-xs font-bold mb-6 text-center bg-rose-50 text-rose-700 border border-rose-100">
+            {error}
           </div>
-        </div>
+        )}
 
-        {/* إضافة مهمة جديدة */}
-        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-          <h2 className="text-base font-bold text-slate-900 mb-4 border-b pb-2">إضافة مهمة منزلية/دراسية ➕</h2>
-          <form onSubmit={handleAddTask} className="space-y-3">
-            <input
-              type="text"
-              value={newTaskText}
-              onChange={(e) => setNewTaskText(e.target.value)}
-              placeholder="مثال: مراجعة نص القراءة الصباحي"
-              className="w-full text-xs p-3 rounded-xl border border-slate-200 outline-none focus:border-emerald-500 bg-slate-50"
-            />
-            <button type="submit" className="w-full bg-emerald-600 text-white font-bold text-xs py-2.5 rounded-xl hover:bg-emerald-700 transition-colors">إرسال المهمة للحديقة 🚀</button>
-          </form>
-
-          <div className="mt-4 space-y-2">
-            <h4 className="text-xs font-bold text-slate-500">المهام النشطة حالياً:</h4>
-            {customTasks.map((task) => (
-              <div key={task.id} className="flex justify-between items-center p-2.5 bg-slate-50 rounded-xl text-xs border border-slate-100">
-                <span className="text-slate-800 font-medium">{task.text}</span>
-                <span className="text-[10px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full font-bold">+{task.xpReward} XP</span>
-              </div>
-            ))}
+        {children.length === 0 && !error ? (
+          <div className="text-center py-16 bg-white rounded-3xl border border-[var(--dusk-100)]">
+            <span className="text-5xl block mb-4">🌱</span>
+            <p className="text-sm text-slate-600 font-bold mb-2">لا يوجد أبناء مسجّلون بعد</p>
+            <p className="text-xs text-slate-500 mb-6">أضف طفلك الأول لتبدأ متابعة رحلته الدراسية</p>
+            <button
+              onClick={() => router.push("/onboarding")}
+              className="bg-[var(--forest-600)] text-white font-bold text-xs px-6 py-3 rounded-xl hover:bg-[var(--forest-700)]"
+            >
+              إضافة طفل جديد
+            </button>
           </div>
-        </div>
-      </div>
+        ) : (
+          <div className="space-y-6">
+            {children.map((child) => {
+              const weakSubjects = child.trees.filter((t) => t.health !== "healthy");
+              return (
+                <div key={child.id} className="bg-white rounded-3xl p-6 shadow-sm border border-[var(--dusk-100)]">
+                  <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
+                    <div>
+                      <h2 className="text-base font-bold text-[var(--ink)]">{child.first_name}</h2>
+                      {child.levelNameAr && (
+                        <p className="text-[11px] text-slate-500 mt-0.5">{child.levelNameAr}</p>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => router.push("/report")}
+                      className="text-[11px] font-bold text-[var(--water-600)] bg-[var(--water-100)] px-3 py-1.5 rounded-full hover:opacity-80"
+                    >
+                      📋 التقرير الكامل
+                    </button>
+                  </div>
+
+                  {child.trees.length === 0 ? (
+                    <p className="text-xs text-slate-500 text-center py-4">
+                      لم يبدأ {child.first_name} أي تحدٍّ بعد.
+                    </p>
+                  ) : (
+                    <>
+                      {weakSubjects.length > 0 && (
+                        <div className="mb-4 p-3 bg-[var(--fruit-100)] border border-[var(--fruit-500)]/20 rounded-2xl">
+                          <p className="text-[11px] font-bold text-[var(--fruit-600)]">
+                            ⚠️ {weakSubjects.length === 1 ? "مادة واحدة تحتاج" : `${weakSubjects.length} مواد تحتاج`} تشجيعاً
+                            إضافياً: {weakSubjects.map((s) => s.subject_name_ar).join("، ")}
+                          </p>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {child.trees.map((tree) => (
+                          <div
+                            key={tree.id}
+                            className="p-3 rounded-xl border border-slate-100 bg-slate-50/40 text-center"
+                          >
+                            <p className="text-xs font-bold text-slate-800">{tree.subject_name_ar}</p>
+                            <p className="text-[10px] text-slate-500 mt-1">XP {tree.xp}</p>
+                            <span
+                              className={`inline-block mt-1.5 text-[9px] font-bold px-2 py-0.5 rounded-full ${HEALTH_META[tree.health].badge}`}
+                            >
+                              {HEALTH_META[tree.health].label}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
     </main>
   );
 }
