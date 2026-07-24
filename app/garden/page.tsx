@@ -1,4 +1,4 @@
-"use client";
+//"use client";
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -11,7 +11,7 @@ interface TreeRow {
   subject_name_ar: string;
   base_color: string;
   xp: number;
-  health: "healthy" | "withering" | "withered";
+  vitality: number;
 }
 
 export default function GardenPage() {
@@ -48,7 +48,7 @@ export default function GardenPage() {
 
       const { data: treeRows, error: treesError } = await supabase
         .from("student_trees_view")
-        .select("id, subject_slug, subject_name_ar, base_color, xp, health")
+        .select("id, subject_slug, subject_name_ar, base_color, xp, vitality")
         .eq("student_id", students[0].id);
       if (treesError) throw treesError;
 
@@ -128,7 +128,8 @@ export default function GardenPage() {
               <SubjectTree
                 key={tree.id}
                 subjectName={tree.subject_name_ar}
-                health={tree.health}
+                subjectSlug={tree.subject_slug}
+                vitality={tree.vitality}
                 xp={tree.xp}
                 fruitColor={tree.base_color}
               />

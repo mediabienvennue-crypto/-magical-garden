@@ -10,16 +10,18 @@ interface TreeRow {
   subject_name_ar: string;
   base_color: string;
   xp: number;
-  health: "healthy" | "withering" | "withered";
+  vitality: number;
   current_streak_days: number;
 }
 
 const XP_CAP = 500;
 
-const HEALTH_LABEL: Record<TreeRow["health"], string> = {
-  healthy: "🌳 مزدهرة",
-  withering: "🍂 تحتاج سقياً",
-  withered: "🥀 ذابلة، أنقذها!",
+const VITALITY_LABEL: Record<number, string> = {
+  5: "🌳 ممتازة",
+  4: "🌿 جيدة",
+  3: "🍃 تحتاج مراجعة",
+  2: "🍂 تحتاج اهتماماً",
+  1: "🌱 ذابلة، أنقذها!",
 };
 
 export default function SubjectsPage() {
@@ -64,7 +66,7 @@ export default function SubjectsPage() {
 
       const { data: treeRows, error: treesError } = await supabase
         .from("student_trees_view")
-        .select("id, subject_slug, subject_name_ar, base_color, xp, health, current_streak_days")
+        .select("id, subject_slug, subject_name_ar, base_color, xp, vitality, current_streak_days")
         .eq("student_id", students[0].id);
       if (treesError) throw treesError;
 
@@ -133,7 +135,7 @@ export default function SubjectsPage() {
                   >
                     <h3 className="text-base font-black">{tree.subject_name_ar}</h3>
                     <p className="text-[11px] font-bold text-white/90 mt-1">
-                      {HEALTH_LABEL[tree.health]}
+                      {VITALITY_LABEL[tree.vitality] ?? VITALITY_LABEL[3]}
                     </p>
                   </div>
 

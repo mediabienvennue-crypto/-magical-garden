@@ -10,7 +10,7 @@ interface TreeRow {
   subject_name_ar: string;
   base_color: string;
   xp: number;
-  health: "healthy" | "withering" | "withered";
+  vitality: number;
 }
 
 interface ChildRow {
@@ -20,10 +20,12 @@ interface ChildRow {
   trees: TreeRow[];
 }
 
-const HEALTH_META: Record<TreeRow["health"], { label: string; badge: string }> = {
-  healthy: { label: "بخير", badge: "bg-[var(--forest-100)] text-[var(--forest-700)]" },
-  withering: { label: "تحتاج انتباهاً", badge: "bg-[var(--fruit-100)] text-[var(--fruit-600)]" },
-  withered: { label: "تحتاج تدخلاً", badge: "bg-rose-100 text-rose-700" },
+const VITALITY_META: Record<number, { label: string; badge: string }> = {
+  5: { label: "ممتازة", badge: "bg-[var(--forest-100)] text-[var(--forest-700)]" },
+  4: { label: "جيدة", badge: "bg-[var(--forest-100)] text-[var(--forest-700)]" },
+  3: { label: "تحتاج مراجعة", badge: "bg-[var(--fruit-100)] text-[var(--fruit-600)]" },
+  2: { label: "تحتاج اهتماماً", badge: "bg-[var(--fruit-100)] text-[var(--fruit-600)]" },
+  1: { label: "تحتاج تدخلاً عاجلاً", badge: "bg-rose-100 text-rose-700" },
 };
 
 export default function ParentsPage() {
@@ -73,7 +75,7 @@ export default function ParentsPage() {
 
         const { data: trees } = await supabase
           .from("student_trees_view")
-          .select("id, subject_slug, subject_name_ar, base_color, xp, health")
+          .select("id, subject_slug, subject_name_ar, base_color, xp, vitality")
           .eq("student_id", s.id);
 
         enriched.push({
@@ -141,7 +143,7 @@ export default function ParentsPage() {
         ) : (
           <div className="space-y-6">
             {children.map((child) => {
-              const weakSubjects = child.trees.filter((t) => t.health !== "healthy");
+              const weakSubjects = child.trees.filter((t) => t.vitality <= 2);
               return (
                 <div key={child.id} className="bg-white rounded-3xl p-6 shadow-sm border border-[var(--dusk-100)]">
                   <div className="flex items-center justify-between mb-4 pb-4 border-b border-slate-100">
@@ -182,9 +184,11 @@ export default function ParentsPage() {
                             <p className="text-xs font-bold text-slate-800">{tree.subject_name_ar}</p>
                             <p className="text-[10px] text-slate-500 mt-1">XP {tree.xp}</p>
                             <span
-                              className={`inline-block mt-1.5 text-[9px] font-bold px-2 py-0.5 rounded-full ${HEALTH_META[tree.health].badge}`}
+                              className={`inline-block mt-1.5 text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                                (VITALITY_META[tree.vitality] ?? VITALITY_META[3]).badge
+                              }`}
                             >
-                              {HEALTH_META[tree.health].label}
+                              {(VITALITY_META[tree.vitality] ?? VITALITY_META[3]).label}
                             </span>
                           </div>
                         ))}
